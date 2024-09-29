@@ -4,3 +4,6 @@ B C
 C D
 D E
 F G
+A C
+H
+G
