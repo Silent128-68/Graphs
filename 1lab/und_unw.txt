@@ -1,4 +1,4 @@
-undirected
+undirected unweighted
 A B
 B C
 C D
