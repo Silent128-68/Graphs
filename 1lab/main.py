@@ -9,61 +9,79 @@ class Graph:
 
     def load_from_file(self, filename):
         with open(filename, 'r') as file:
-            first_line = file.readline().strip().lower()  # Первая строка для типа графа
-            if first_line == 'directed weighted':
-                self.directed = True
-                self.weighted = True
-            elif first_line == 'directed unweighted':
-                self.directed = True
-                self.weighted = False
-            elif first_line == 'undirected weighted':
-                self.directed = False
-                self.weighted = True
-            elif first_line == 'undirected unweighted':
-                self.directed = False
-                self.weighted = False
-            else:
-                raise ValueError("Первой строкой файла должно быть 'directed weighted', 'directed unweighted', 'undirected weighted' или 'undirected unweighted'.")
-
             lines = file.readlines()
 
-        # Сначала собираем все вершины
-        vertices = set()
-        for line in lines:
+        # Определяем тип графа (направленный/ненаправленный) и взвешенный/невзвешенный
+        header = lines[0].strip().lower().split()
+        self.directed = header[0] == 'directed'
+        self.weighted = header[1] == 'weighted'
+
+        # Используем словарь для хранения графа
+        self.graph = {}
+        all_vertices = set()
+
+        for i, line in enumerate(lines[1:]):
             parts = line.strip().split()
+
             if len(parts) == 1:
-                vertices.add(parts[0])
-            elif len(parts) >= 2:
-                vertices.add(parts[0])
-                vertices.add(parts[1])
+                vertex = parts[0]
+                all_vertices.add(vertex)
+                self.graph.setdefault(vertex, [])
+                continue
 
-        # Добавляем все вершины
-        for vertex in vertices:
-            self.add_vertex(vertex)
+            if self.weighted:
+                u, v, weight = parts[0], parts[1], float(parts[2])
+                all_vertices.update([u, v])
+                self.graph.setdefault(u, []).append((v, weight))
+                if not self.directed:
+                    if u != v:
+                        self.graph.setdefault(v, []).append((u, weight))
+            else:
+                u, v = parts[0], parts[1]
+                all_vertices.update([u, v])
+                self.graph.setdefault(u, []).append((v, None))
+                if not self.directed:
+                    if u != v:
+                        self.graph.setdefault(v, []).append((u, None))
 
-        # Теперь добавляем ребра
-        for line in lines:
-            parts = line.strip().split()
-            if len(parts) == 1:
-                continue  # Если в строке только одна вершина, пропускаем её
-            elif len(parts) == 2:
-                u, v = parts
-                self.add_edge(u, v)
-            elif len(parts) == 3:
-                if not self.weighted:
-                    raise ValueError("Граф не взвешенный, но в файле указаны веса.")
-                u, v, weight = parts
-                self.add_edge(u, v, float(weight))
+        # Обеспечиваем наличие всех вершин, включая обособленные
+        for vertex in all_vertices:
+            if vertex not in self.graph:
+                self.graph[vertex] = []
 
-    def copy(self):
-        return Graph(self.directed, self.adjacency_list, self.weighted)
+        # Копируем данные из self.graph в self.adjacency_list для дальнейшего использования
+        self.adjacency_list = self.graph.copy()
+
+        # Вывод содержимого графа:
+        print(f"Граф из файла '{filename}' загружен. Вот его содержимое:")
+        for vertex, edges in self.graph.items():
+            if edges:
+                if self.weighted:
+                    edges_str = ', '.join(f"{v} (вес: {weight})" for v, weight in edges)
+                else:
+                    edges_str = ', '.join(v for v, _ in edges)
+                print(f"{vertex}: {edges_str}")
+            else:
+                if self.directed:
+                    has_incoming = any(vertex in [v for v, _ in adj] for adj in self.graph.values())
+                    if has_incoming:
+                        print(f"{vertex}: нет исходящих рёбер")
+                    else:
+                        print(f"{vertex}: нет рёбер")
+                else:
+                    print(f"{vertex}: нет рёбер")
+
+        # Вывод типа графа:
+        graph_type = "Ориентированный" if self.directed else "Неориентированный"
+        weight_type = "Взвешенный" if self.weighted else "Невзвешенный"
+        print(f"Тип графа: {graph_type}, {weight_type}")
 
     def display_adjacency_list(self):
         for vertex in self.adjacency_list:
             if self.weighted:
                 edges = ', '.join(f"{adj} ({weight})" for adj, weight in self.adjacency_list[vertex])
             else:
-                edges = ', '.join(adj for adj, in self.adjacency_list[vertex])
+                edges = ', '.join(str(adj) for adj, *_ in self.adjacency_list[vertex])
             print(f"{vertex}: {edges if edges else ''}")
 
     def add_vertex(self, vertex):
@@ -133,7 +151,7 @@ class Graph:
                 if self.weighted:
                     self.adjacency_list[adj] = [(v, w) for v, w in self.adjacency_list[adj] if v != vertex]
                 else:
-                    self.adjacency_list[adj] = [v for v, in self.adjacency_list[adj] if v != vertex]
+                    self.adjacency_list[adj] = [v for v, *_ in self.adjacency_list[adj] if v != vertex]
         else:
             print(f"Вершина {vertex} не существует.")
 
@@ -148,7 +166,7 @@ class Graph:
                     print(f"Ребро {u}-{v} не существует.")
             else:
                 original_length = len(self.adjacency_list[u])
-                self.adjacency_list[u] = [x for x, in self.adjacency_list[u] if x != v]
+                self.adjacency_list[u] = [x for x, *_ in self.adjacency_list[u] if x != v]
                 if len(self.adjacency_list[u]) < original_length:
                     print(f"Ребро {u}-{v} удалено.")
                 else:
@@ -158,7 +176,7 @@ class Graph:
                 if self.weighted:
                     self.adjacency_list[v] = [(x, w) for x, w in self.adjacency_list[v] if x != u]
                 else:
-                    self.adjacency_list[v] = [x for x, in self.adjacency_list[v] if x != u]
+                    self.adjacency_list[v] = [x for x, *_ in self.adjacency_list[v] if x != u]
         else:
             print(f"Вершина {u} не существует.")
 
@@ -193,7 +211,7 @@ class Graph:
             if self.weighted:
                 edges = ", ".join(f"{adj} ({weight})" for adj, weight in self.adjacency_list[vertex])
             else:
-                edges = ", ".join(adj for adj, in self.adjacency_list[vertex])
+                edges = ", ".join(adj for adj, *_ in self.adjacency_list[vertex])
             result += f"{edges}\n"
         return result
 
@@ -226,13 +244,6 @@ def console_interface():
         try:
             graph = Graph()  # Инициализируем граф перед загрузкой
             graph.load_from_file(filename)
-            print(f"Граф из файла '{filename}' загружен. Вот его содержимое:")
-            graph.display_adjacency_list()
-            # Отображаем тип графа
-            graph_type = []
-            graph_type.append("Ориентированный" if graph.directed else "Неориентированный")
-            graph_type.append("Взвешенный" if graph.weighted else "Невзвешенный")
-            print(f"Тип графа: {', '.join(graph_type)}")
         except FileNotFoundError:
             print(f"Файл '{filename}' не найден. Создан пустой граф.")
             # Запрашиваем тип графа при создании пустого графа
@@ -285,7 +296,7 @@ def console_interface():
             if graph.weighted:
                 edge_exists = any(neighbor == v for neighbor, _ in graph.adjacency_list.get(u, []))
             else:
-                edge_exists = any(neighbor == v for neighbor, in graph.adjacency_list.get(u, []))
+                edge_exists = any(neighbor == v for neighbor, *_ in graph.adjacency_list.get(u, []))
 
             if edge_exists:
                 overwrite_choice = input(f"Ребро {u}-{v} уже существует. Хотите перезаписать его? (да/нет): ").strip().lower()
@@ -344,13 +355,6 @@ def console_interface():
             filename = input("Введите имя файла для загрузки графа: ").strip()
             try:
                 graph.load_from_file(filename)
-                print(f"Граф из файла '{filename}' загружен. Вот его содержимое:")
-                graph.display_adjacency_list()
-                # Отображаем тип графа
-                graph_type = []
-                graph_type.append("Ориентированный" if graph.directed else "Неориентированный")
-                graph_type.append("Взвешенный" if graph.weighted else "Невзвешенный")
-                print(f"Тип графа: {', '.join(graph_type)}")
             except FileNotFoundError:
                 print(f"Файл '{filename}' не найден.")
             except ValueError as ve:
