@@ -463,7 +463,7 @@ class Graph:
 
         if shortest_length == float('inf'):
             print(f"Путь из {start} в {end} не существует.")
-            return []
+            return [], float('inf')
 
         def dfs(current, path):
             if current == start:
@@ -474,7 +474,7 @@ class Graph:
 
         result = []
         dfs(end, [])
-        return result
+        return result, shortest_length
 
     # Задание 8: Определить N-периферию для заданной вершины графа
     def floyd_warshall(self):
