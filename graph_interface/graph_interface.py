@@ -4,6 +4,7 @@ from graph import Graph  # Ваш класс Graph
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import random
 
 class GraphApp:
     def __init__(self, root):
@@ -11,6 +12,7 @@ class GraphApp:
         self.root.title("Графический интерфейс для работы с графами")
         self.graph = None  # Изначально граф не выбран
         self.nx_graph = nx.Graph()  # Граф для визуализации
+        self.vertex_positions = {}  # Хранение позиций вершин
         self.figure, self.ax = plt.subplots(figsize=(5, 4))
         self.canvas = None
         self.init_ui()
@@ -18,8 +20,6 @@ class GraphApp:
     def init_ui(self):
         self.create_menu()
         self.create_canvas()
-
-        # Вопрос пользователю: загрузить граф или создать новый
         self.ask_initial_action()
 
     def ask_initial_action(self):
@@ -54,11 +54,6 @@ class GraphApp:
 
         # Меню "Анализ"
         analysis_menu = tk.Menu(menu_bar, tearoff=0)
-        analysis_menu.add_command(label="Основная компонента и изолированные рёбра", command=self.show_main_component)
-        analysis_menu.add_command(label="Длина кратчайшего пути и все пути", command=self.find_shortest_paths)
-        analysis_menu.add_command(label="Определить N-периферию", command=self.find_n_periphery)
-        analysis_menu.add_command(label="Найти отрицательные циклы", command=self.find_negative_cycles)
-        # Новые функции
         analysis_menu.add_command(label="Решить задание 1 (полустепень захода)", command=self.solve_task1)
         analysis_menu.add_command(label="Решить задание 2 (заходящие соседи)", command=self.solve_task2)
         analysis_menu.add_command(label="Решить задание 3 (удалить непарные дуги)", command=self.solve_task3)
@@ -66,7 +61,15 @@ class GraphApp:
         analysis_menu.add_command(label="Найти центр графа (BFS)", command=self.find_graph_center)
         analysis_menu.add_command(label="Найти минимальное остовное дерево (Kruskal)",
                                   command=self.find_minimum_spanning_tree)
+        analysis_menu.add_command(label="Основная компонента и изолированные рёбра", command=self.show_main_component)
+        analysis_menu.add_command(label="Длина кратчайшего пути и все пути", command=self.find_shortest_paths)
+        analysis_menu.add_command(label="Определить N-периферию", command=self.find_n_periphery)
+        analysis_menu.add_command(label="Найти отрицательные циклы", command=self.find_negative_cycles)
         menu_bar.add_cascade(label="Анализ", menu=analysis_menu)
+
+        # Кнопка перегенерации
+        regenerate_button = tk.Button(self.root, text="Перегенерировать", command=self.regenerate_graph)
+        regenerate_button.pack()
 
         self.root.config(menu=menu_bar)
 
@@ -106,13 +109,57 @@ class GraphApp:
 
         self.canvas.draw()
 
+    def randomize_positions(self):
+        """Генерация случайных позиций вершин."""
+        width, height = 800, 600  # Размеры окна рисования
+        self.vertex_positions = {
+            vertex: (random.randint(50, width - 50), random.randint(50, height - 50))
+            for vertex in self.graph.adjacency_list
+        }
+
+    def regenerate_graph(self):
+        """Перегенерация позиций вершин."""
+        if self.graph:
+            self.randomize_positions()
+            self.draw_graph()
+        else:
+            messagebox.showerror("Ошибка", "Граф не загружен или не создан!")
+
+    def draw_graph(self):
+        """Отрисовка графа с сохранением позиций."""
+        self.ax.clear()
+        self.ax.set_title("Визуализация графа")
+        self.ax.axis("off")
+
+        if self.graph:
+            # Преобразуем граф в объект NetworkX
+            self.nx_graph = self.graph.to_networkx()
+
+            # Используем сохраненные позиции
+            nx.draw(
+                self.nx_graph, pos=self.vertex_positions, ax=self.ax, with_labels=True,
+                node_color="lightblue", font_weight="bold"
+            )
+
+            # Если граф взвешенный, добавляем веса рёбер
+            if self.graph.weighted:
+                edge_labels = nx.get_edge_attributes(self.nx_graph, 'weight')
+                nx.draw_networkx_edge_labels(
+                    self.nx_graph, pos=self.vertex_positions, edge_labels=edge_labels,
+                    ax=self.ax, font_size=8, label_pos=0.5
+                )
+
+        self.canvas.draw()
+
     def load_graph(self):
         filename = filedialog.askopenfilename(title="Выберите файл графа")
         if filename:
             try:
                 self.graph = Graph()
                 self.graph.load_from_file(filename)
-                self.update_graph_visualization()
+                if not self.vertex_positions:
+                    self.randomize_positions()
+                self.draw_graph()
                 print(f"Граф загружен из файла: {filename}")
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось загрузить граф: {e}")
@@ -192,8 +239,8 @@ class GraphApp:
             return
         vertex = simpledialog.askstring("Полустепень захода", "Введите вершину:")
         if vertex:
-            in_degree = self.graph.in_degree(vertex)
-            messagebox.showinfo("Результат", f"Полустепень захода вершины {vertex}: {in_degree}")
+            in_degree = self.graph.vertices_with_lower_indegree(vertex)
+            messagebox.showinfo("Результат", f"Вершины с полустепенью захода менье, чем у {vertex}: {in_degree}")
 
     def solve_task2(self):
         if not self.ensure_graph_loaded():
@@ -206,7 +253,7 @@ class GraphApp:
     def solve_task3(self):
         if not self.ensure_graph_loaded():
             return
-        self.graph.remove_unpaired_edges()
+        self.graph.remove_non_reciprocal_edges()
         self.update_graph_visualization()
         messagebox.showinfo("Результат", "Непарные дуги удалены.")
 
@@ -216,13 +263,13 @@ class GraphApp:
         u = simpledialog.askstring("Все пути (DFS)", "Введите начальную вершину:")
         v = simpledialog.askstring("Все пути (DFS)", "Введите конечную вершину:")
         if u and v:
-            paths = self.graph.find_all_paths(u, v)
+            paths = self.graph.dfs_all_paths(u, v)
             messagebox.showinfo("Результат", f"Все пути от {u} до {v}: {paths}")
 
     def find_graph_center(self):
         if not self.ensure_graph_loaded():
             return
-        center = self.graph.find_center()
+        center = self.graph.find_graph_center()
         messagebox.showinfo("Результат", f"Центр графа: {center}")
 
     def find_minimum_spanning_tree(self):
@@ -234,31 +281,69 @@ class GraphApp:
     def show_main_component(self):
         if not self.ensure_graph_loaded():
             return
-        main_component, isolated_edges = self.graph.find_main_component_and_isolated_edges()
+        main_component, isolated_edges = self.graph.identify_main_component()
         print(f"Основная компонента: {main_component}\nИзолированные рёбра: {isolated_edges}")
 
     def find_shortest_paths(self):
         if not self.ensure_graph_loaded():
             return
+
         u = simpledialog.askstring("Кратчайшие пути", "Введите начальную вершину:")
+        if not u:
+            return
+
         v = simpledialog.askstring("Кратчайшие пути", "Введите конечную вершину:")
-        if u and v:
-            paths, length = self.graph.find_shortest_paths_and_length(u, v)
-            print(f"Длина: {length}\nПути: {paths}")
+        if not v:
+            return
+
+        try:
+            paths, length = self.graph.find_all_shortest_paths(u, v)
+            if paths:
+                result = "\n".join([f"{' -> '.join(path)}" for path in paths])
+                messagebox.showinfo("Результат", f"Длина: {length}\nПуть:\n{result}")
+            else:
+                messagebox.showinfo("Результат", f"Путь из {u} в {v} не существует.")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при поиске кратчайших путей: {e}")
 
     def find_n_periphery(self):
         if not self.ensure_graph_loaded():
             return
+
+        source = simpledialog.askstring("N-периферия", "Введите начальную вершину:")
+        if source is None:
+            return
+
         n = simpledialog.askinteger("N-периферия", "Введите значение N:")
-        if n is not None:
-            periphery = self.graph.find_n_periphery(n)
-            print(f"N-периферия: {periphery}")
+        if n is None:
+            return
+
+        try:
+            periphery = self.graph.find_n_periphery(source, n)
+            messagebox.showinfo("Результат", f"N-периферия для вершины {source} при N={n}:\n{periphery}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Ошибка при поиске N-периферии: {e}")
 
     def find_negative_cycles(self):
         if not self.ensure_graph_loaded():
             return
-        cycles = self.graph.find_negative_cycles()
-        print(f"Отрицательные циклы: {cycles}")
+        try:
+            all_cycles = set()  # Используем множество для хранения уникальных циклов
+            for start in self.graph.adjacency_list:
+                cycles = self.graph.bellman_ford(start)
+                for cycle in cycles:
+                    # Преобразуем цикл в кортеж с сортировкой для уникальности
+                    normalized_cycle = tuple(sorted(cycle))
+                    all_cycles.add(normalized_cycle)
+
+            if all_cycles:
+                result = "\n".join([f"Цикл: {cycle}" for cycle in all_cycles])
+                messagebox.showinfo("Результат", f"Найдены отрицательные циклы:\n{result}")
+            else:
+                messagebox.showinfo("Результат", "Отрицательных циклов не найдено.")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка при поиске циклов: {e}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
